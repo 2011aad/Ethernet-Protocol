@@ -1,16 +1,15 @@
-/**
- * Created by Jian on 2015/8/13.
- */
 public class Server implements Runnable {
     private static int ONUNUMBER;
     private int CYCLENUMBER;
     private static int counter = 0;
     private static double systime = 0;
-    private static double[] idle_time = new double[ONUNUMBER];
+    private static double[] idle_time;
+    private static double tmp;
 
     public Server(int ONUNUMBER, int CYCLENUMBER){
         this.ONUNUMBER = ONUNUMBER;
         this.CYCLENUMBER = CYCLENUMBER;
+        idle_time = new double[ONUNUMBER];
     }
 
     public void run(){
@@ -18,10 +17,10 @@ public class Server implements Runnable {
             System.out.println("Cycle " + counter);
             for(int i=0;i<ONUNUMBER;i++) {
                 try {
-                    Simulation.server_lock.acquire();
+                	Simulation.server_lock.acquire();
+                    if(counter!=0)Simulation.set_grant((i-1+ONUNUMBER)%ONUNUMBER, tmp);
                     systime = Simulation.grant[i];
-                    Simulation.set_grant(i, calculate_next_grant(Simulation.report, i));
-                   // System.out.println("release ONU " + i + " lock");
+                    tmp = calculate_next_grant(Simulation.report, i);
                     Simulation.customer_lock[i].release();
                 }catch (InterruptedException e){
                     e.printStackTrace();
@@ -35,8 +34,6 @@ public class Server implements Runnable {
             Simulation.set_grant(i, -1);
             Simulation.customer_lock[i].release();
         }
-
-        System.out.println("server stopped");
     }
 
     public static double calculate_next_grant(int [] report, int i){
@@ -51,7 +48,6 @@ public class Server implements Runnable {
         else {
             grant = Simulation.grant[(i-1+ONUNUMBER)%ONUNUMBER]+report[(i-1+ONUNUMBER)%ONUNUMBER]*factor+Simulation.guard_time;
         }
-        if (i == 0) System.out.println("grant time: " + grant);
         return grant;
     }
 }

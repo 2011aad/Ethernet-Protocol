@@ -5,8 +5,8 @@
 import java.util.concurrent.Semaphore;
 
 public class Simulation {
-    public static final int ONUNUMBER = 4;
-    public static final int CYCLENUMBER = 50000;
+    public static final int ONUNUMBER = 32;
+    public static final int CYCLENUMBER = 10000;
     public static final double RTT = 1e-4;
     public static final double guard_time = 1e-6;
     public static final double PACKETBIT = 64 * 8;
