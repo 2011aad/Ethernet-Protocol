@@ -1,122 +1,158 @@
 import java.util.LinkedList;
 import java.util.Queue;
 
+import javax.print.attribute.standard.Finishings;
+
 public class Customer implements Runnable {
-
+	
+	private int identifier;
     private final int SLEEP = 0, DOZE = 1;
-    private final int THRESHOLD = 0; //ãÐÖµ
-
-    private final double offerload = 0.98;
-    private double arrivalRate = offerload * Simulation.RATE / ((Simulation.PACKETBIT) * Simulation.ONUNUMBER);
-    private final double wakeUpTime = 1.25e-4; //125¦ÌS
-
-    private int identifier;
-    private int currentState = 0; //³õÊ¼ÔÚË¯¾õ
+    private int currentState = 0; //ï¿½ï¿½Ê¼ï¿½ï¿½Ë¯ï¿½ï¿½
 
     private double systemTime = 0;
-    private double nextArrivalTime = exponential(arrivalRate); //ÏÂ´Îµ½´ïÊ±¼ä
-    
+    private double lastSystemTime = 0; //ï¿½Ï¸ï¿½ÏµÍ³Ê±ï¿½ï¿½
+    private double nextArrivalTime = exponential(Simulation.ARRIVALRATE); //ï¿½Â´Îµï¿½ï¿½ï¿½Ê±ï¿½ï¿½
+
+    //Í³ï¿½ï¿½delay
     private double totalDelay = 0;
     private int totalPacket = 0;
+    
+    //Í³ï¿½Æ¸ï¿½ï¿½ï¿½×´Ì¬Ê±ï¿½ï¿½
+    private double activeTime = 0, sleepTime = 0, dozeTime = 0;
+    private int wakeUpTimes;
 
     private Queue<Packet> buffer = new LinkedList<Packet>();
     public Customer(int identifier) {this.identifier = identifier;}
 
     @Override
     public void run() {
+    	
+    	double offerLoad = Simulation.ARRIVALRATE;
         while (true) {
             try {
-                Simulation.customer_lock[identifier].acquire();
+            	
+            	Simulation.customer_lock[identifier].acquire();
+            	
+//            	if (identifier == 0) {
+//            		//System.out.println(offerLoad);
+//            		System.out.println(Simulation.grant[identifier] + " ");
+//            	}
+            	
+            	
                 if(Simulation.grant[identifier] < -0.5) break;
-                double grant = Simulation.grant[identifier] + Simulation.RTT / 2; //grantÊ±¼ä
-
-                switch(currentState) {
-                    case SLEEP: //ÔÚË¯¾õ
-                    {
-                        if (buffer.size() >= THRESHOLD) currentState = DOZE;
-                        while (systemTime < grant) { //ÍÆ½øÏµÍ³Ê±¼ä
-
-                            if (nextArrivalTime < grant) {
-                                addPacket();
-	                            if (buffer.size() == THRESHOLD) { //´¥·¢ãÐÖµ
-	                                if (grant > (systemTime + wakeUpTime)) currentState = DOZE; //grantÊ±¿ÌÒÑ¾­´¦ÓÚDOZE
-	                                else { //grantÊ±¿Ì´¦ÓÚWAKEUP
-	                                    grant = systemTime + wakeUpTime; //ÍÆ½øµ½WAKEUP½áÊøÊ±¿Ì
-	                                    currentState = SLEEP;
-	                                }
+                
+                lastSystemTime = systemTime;
+             
+                double grant = Simulation.grant[identifier] + Simulation.RTT / 2; //grantÊ±ï¿½ï¿½
+                
+                if (grant < systemTime) Simulation.report[identifier] = 0;
+                else {           
+	                switch(currentState) {
+	                    case SLEEP: //Ë¯ï¿½ï¿½
+	                    {
+	                    	boolean isWakeUp = false;
+	                    	double wakeUpPoint = 0;
+	                        if (buffer.size() >= Simulation.WAKEUPTHRESHOLD) currentState = DOZE; //Ëµï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½grantï¿½ï¿½WakeUpï¿½Ú¼ï¿½
+	                        
+	                        while (systemTime < grant) { //ï¿½Æ½ï¿½ÏµÍ³Ê±ï¿½ï¿½
+	                            if (nextArrivalTime < grant) {
+	                                addPacket(); 
+		                            if (buffer.size() == Simulation.WAKEUPTHRESHOLD) { //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ
+		                            	isWakeUp = true;
+		                            	wakeUpPoint = systemTime;
+		                            	wakeUpTimes ++;
+		                                if (grant > (systemTime + Simulation.WAKEUPTIME)) currentState = DOZE; //grantÊ±ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½ï¿½ï¿½DOZE
+		                                
+		                                else { //grantÊ±ï¿½Ì´ï¿½ï¿½ï¿½WAKEUP
+		                                    grant = systemTime + Simulation.WAKEUPTIME; //ï¿½Æ½ï¿½ï¿½ï¿½WAKEUPï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½
+		                                    currentState = SLEEP;
+		                                }
+		                            }
+	                            } else { //ï¿½Â´ï¿½arrivalÊ±ï¿½Ì³ï¿½ï¿½ï¿½grant                         	
+	                            	if (isWakeUp) {                      		
+	                            		sleepTime += wakeUpPoint - lastSystemTime;
+	                            		if (grant > (wakeUpPoint + Simulation.WAKEUPTIME)) dozeTime += grant - (wakeUpPoint + Simulation.WAKEUPTIME);
+	                            	}
+	                            	else { //Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	                            		if (currentState == SLEEP) sleepTime += grant - lastSystemTime;
+	                            		if (currentState == DOZE) dozeTime += grant - lastSystemTime;
+	                            	}                          	
+	                                systemTime = grant;
+	                                if (currentState == DOZE) Simulation.report[identifier] = buffer.size();      
+	                                if (currentState == SLEEP) Simulation.report[identifier] = 0;
+	                                break;
+	                            }  
+	                        }
+	                        break;
+	                    }
+	                    case DOZE: //ï¿½Ë¯
+	                    {
+	                        while (systemTime < grant) {
+	                            if (nextArrivalTime < grant) {
+	                                addPacket();
+	                            } else {
+	                                systemTime = grant;
+	                                break;
+	                            } //ï¿½Æ½ï¿½ï¿½ï¿½grant,ï¿½ï¿½Ê¼ï¿½ï¿½È¥
+	                        }
+	                        dozeTime += grant - lastSystemTime;
+	                        //System.out.println("A: " + (grant - lastSystemTime));
+	
+	                        for (int i = 0; i < Simulation.report[identifier]; i++) { //ï¿½ï¿½ï¿½ï¿½ï¿½Ï´Î±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	                            Packet tmp = buffer.remove();
+	                            tmp.setDepartureTime(systemTime + (i+1) * Simulation.PACKETBIT / Simulation.RATE);
+	                            totalDelay += tmp.getDepartureTime() - tmp.getArriveTime();
+	                            totalPacket++;
+	                        }
+	                        grant += Simulation.report[identifier] * Simulation.PACKETBIT / Simulation.RATE;
+	                        activeTime += Simulation.report[identifier] * Simulation.PACKETBIT / Simulation.RATE;
+	                        
+	                        while (systemTime < grant) {//ï¿½Æ½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôºï¿½
+	                            if (nextArrivalTime < grant) addPacket();
+	                            else {
+	                                systemTime = grant;
+	                                break;
 	                            }
-                            } else { //ÏÂ´ÎarrivalÊ±¿Ì³¬¹ýgrant
-                                systemTime = grant;
-                                if (currentState == DOZE){
-                                    Simulation.report[identifier] = buffer.size();      
-                                }
-                                if (currentState == SLEEP){
-                                    Simulation.report[identifier] = 0;
-                                }
-                                break;
-                            }  
-                        }
-                        break;
-                    }
-                    case DOZE: //ÔÚ´òî§Ë¯
-                    {
-                        while (systemTime < grant) {
-                        	
-                            if (nextArrivalTime < grant) {
-                                addPacket();
-                            } else {
-                                systemTime = grant;
-                                break;
-                            } //ÍÆ½øµ½grant,¿ªÊ¼ÀëÈ¥
-                        }
-
-                        for (int i = 0; i < Simulation.report[identifier]; i++) { //´«ËÍÉÏ´Î±¨¸æ°üÊý
-                            Packet tmp = buffer.remove();
-                            tmp.setDepartureTime(systemTime + (i+1) * Simulation.PACKETBIT / Simulation.RATE);
-                            totalDelay += tmp.getDepartureTime() - tmp.getArriveTime();
-                            totalPacket++;
-                        }
-
-                        grant += Simulation.report[identifier] * Simulation.PACKETBIT / Simulation.RATE;
-                        while (systemTime < grant) {//ÍÆ½øµ½·¢°ü½áÊøÒÔºó
-                            if (nextArrivalTime < grant) {
-                                addPacket();
-                            } else {
-                                systemTime = grant;
-                                break;
-                            }
-                        }
-                        if (buffer.size() >= THRESHOLD) { //³¬¹ýãÐÖµ,ÏÂ´Î¼ÌÐø´«Êä
-                            Simulation.report[identifier] = buffer.size();
-                            currentState = DOZE;
-                        } else {
-                            currentState = SLEEP; //·ñÔò£¬Ë¯¾õ
-                            Simulation.report[identifier] = 0;
-                        }
-                        break;
-                    }
+	                        }
+	                        if (buffer.size() >= Simulation.SLEEPTHRESHOLD) { //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµ,ï¿½Â´Î¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	                            Simulation.report[identifier] = buffer.size();
+	                            currentState = DOZE;
+	                        } else {
+	                            currentState = SLEEP; //ï¿½ï¿½ï¿½ï¿½Ë¯ï¿½ï¿½
+	                            Simulation.report[identifier] = 0;
+	                        }
+	                        break;
+	                    }
+	                }
                 }
+                //System.out.println("system time: " + systemTime);
             }catch (InterruptedException e){
                 e.printStackTrace();
             }
             Simulation.server_lock.release();
-        }
-        
+        }   
         if (identifier == 0){
-	        System.out.print("ONU " + identifier + " stopped; ");
-	        System.out.print("average delay: ");
-	        System.out.println(totalDelay / totalPacket);
+        	System.out.println("OfferLoad: " + offerLoad);
+ 	        System.out.print("Average delay: ");
+ 	        System.out.println(totalDelay / totalPacket);
+ 	        System.out.println("Total system time: " + systemTime);
+ 	        System.out.println("Sleep time: " + sleepTime);
+ 	        System.out.println("Active time: " + activeTime);
+ 	        System.out.println("wakeUpTimes: " + wakeUpTimes);
+ 	        System.out.println("WakeUp time: " + wakeUpTimes * Simulation.WAKEUPTIME);
+ 	        System.out.println("Doze time: " + dozeTime);
+ 	        System.out.println("SleepTime + ActiveTime + DozeTime + WakeUpTimes: " + (sleepTime + activeTime + dozeTime + (wakeUpTimes) * Simulation.WAKEUPTIME)); 
+ 	        System.out.println();
         }
-        
     }
+    
+    private double exponential(double mean) {return (-(1 / mean) * Math.log(Math.random()));}
 
-    public double exponential(double mean) {return (-(1 / mean) * Math.log(Math.random()));}
-
-    private void addPacket(){
-    	systemTime = nextArrivalTime; //¸üÐÂÏµÍ³Ê±¼ä
+    private void addPacket(){	
+    	systemTime = nextArrivalTime; //ï¿½ï¿½ï¿½ï¿½ÏµÍ³Ê±ï¿½ï¿½
         Packet tmp = new Packet();
         tmp.setArriveTime(systemTime);
         buffer.add(tmp);
-        nextArrivalTime = systemTime + exponential(arrivalRate); //¸üÐÂÏÂ´Îµ½´ïÊ±¼ä
+        nextArrivalTime = systemTime + exponential(Simulation.ARRIVALRATE); //ï¿½ï¿½ï¿½ï¿½ï¿½Â´Îµï¿½ï¿½ï¿½Ê±ï¿½ï¿½
     }
 }
